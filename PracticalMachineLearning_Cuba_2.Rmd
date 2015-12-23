@@ -1,0 +1,100 @@
+---
+title: "Practical Machine Learning - Course Project"
+output: html_document
+---
+
+Practical Machine Learning - Course Project - Writeup
+==========================================================
+
+In this assignment,  the provided data have been analyzed to determine what activity an individual can perform. In order to do this, package caret and randomForest have been used. This will allow generating correct answers in this assignment.  A seed value have been used to get consistent results.
+
+
+```{r}
+library(Hmisc)
+library(caret)
+library(randomForest)
+library(foreach)
+library(doParallel)
+set.seed(12345)
+options(warn=-1)
+```
+
+Data provided have been loaded that are training and test data. Values contained "#DIV/0!" have been replaced by an NA value.
+
+```{r}
+training_data <- read.csv("pml-training.csv", na.strings=c("#DIV/0!") )
+testing_data <- read.csv("pml-testing.csv", na.strings=c("#DIV/0!") )
+```
+
+All columns 8 to the end have been casted to numeric.
+
+```{r}
+for(i in c(8:ncol(training_data)-1)) {training_data[,i] = as.numeric(as.character(training_data[,i]))}
+
+for(i in c(8:ncol(testing_data)-1)) {testing_data[,i] = as.numeric(as.character(testing_data[,i]))}
+```
+
+Some columns were mostly blank.  Hence, good prediction cannot be achieved. Feature sets that include complete column only will be chosen. Username, timestamps and windows also have been removed. Determination of feature sets have been done and displayed.  
+
+
+```{r}
+feature_set <- colnames(training_data[colSums(is.na(training_data)) == 0])[-(1:7)]
+model_data <- training_data[feature_set]
+feature_set
+```
+
+Model data built from selected feature set have been obtained.
+
+```{r}
+index <- createDataPartition(y=model_data$classe, p=0.75, list=FALSE )
+training <- model_data[index,]
+testing <- model_data[-index,]
+```
+
+Five random forests with 150 trees each have been developed. Parallel processing have been used to build this model. 
+
+```{r}
+registerDoParallel()
+x <- training[-ncol(training)]
+y <- training$classe
+
+rf <- foreach(ntree=rep(150, 6), .combine=randomForest::combine, .packages='randomForest') %dopar% {
+randomForest(x, y, ntree=ntree) 
+}
+```
+
+Error reports for both training and test data have been generated.
+```{r}
+predictions1 <- predict(rf, newdata=training)
+confusionMatrix(predictions1,training$classe)
+
+
+predictions2 <- predict(rf, newdata=testing)
+confusionMatrix(predictions2,testing$classe)
+```
+
+Conclusions and Test Data Submit
+--------------------------------
+
+Confusion matrix obtained from this model is very accurate. Because test data was around 99% accurate, it is expected nearly all of the submitted test cases to be correct.  It turned out they were all correct.
+
+Submission for this course project have been prepared by COURSERA.  
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+
+x <- testing_data
+x <- x[feature_set[feature_set!='classe']]
+answers <- predict(rf, newdata=x)
+
+answers
+
+pml_write_files(answers)
+```
